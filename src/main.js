@@ -40,6 +40,7 @@ function animate() {
 
     // 1. Logic
     player.update(deltaTime);
+    portalSystem.update(deltaTime);
 
     // 2. Render Portals (Draws to textures)
     portalSystem.render();

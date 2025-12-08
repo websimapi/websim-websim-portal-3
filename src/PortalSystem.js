@@ -20,41 +20,100 @@ export class PortalSystem {
             })
         };
 
-        // Screen-space texture projection shader
-        const shader = {
-            vertexShader: `
-                varying vec4 vPos;
-                void main() {
-                    vPos = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-                    gl_Position = vPos;
+        // Screen-space texture projection shader with Oval Border
+        const vertexShader = `
+            varying vec2 vUv;
+            varying vec4 vPos;
+            void main() {
+                vUv = uv;
+                vPos = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                gl_Position = vPos;
+            }
+        `;
+
+        const fragmentShader = `
+            uniform sampler2D map;
+            uniform vec2 resolution;
+            uniform float time;
+            uniform vec3 borderColor;
+            uniform float activePortal; // 0 = closed, 1 = open
+            varying vec2 vUv;
+
+            // Simple pseudo-noise
+            float random (in vec2 st) {
+                return fract(sin(dot(st.xy, vec2(12.9898,78.233))) * 43758.5453123);
+            }
+            float noise (in vec2 st) {
+                vec2 i = floor(st);
+                vec2 f = fract(st);
+                float a = random(i);
+                float b = random(i + vec2(1.0, 0.0));
+                float c = random(i + vec2(0.0, 1.0));
+                float d = random(i + vec2(1.0, 1.0));
+                vec2 u = f * f * (3.0 - 2.0 * f);
+                return mix(a, b, u.x) + (c - a)* u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
+            }
+
+            void main() {
+                vec2 p = vUv * 2.0 - 1.0;
+                float r = length(p); // Oval shape
+
+                // Animation
+                float angle = atan(p.y, p.x);
+                float wave = sin(angle * 10.0 + time * 4.0) * 0.015;
+                float turb = noise(p * 8.0 + time * 2.0);
+                
+                float borderInner = 0.82 + wave + turb * 0.03;
+                float borderOuter = 0.95 + wave;
+                
+                if (r > borderOuter) {
+                    discard;
                 }
-            `,
-            fragmentShader: `
-                uniform sampler2D map;
-                uniform vec2 resolution;
-                void main() {
-                    vec2 uv = gl_FragCoord.xy / resolution;
-                    gl_FragColor = texture2D(map, uv);
+                
+                // Border glow
+                vec3 glow = mix(borderColor, vec3(1.0), 0.3 + 0.7 * sin(time * 3.0 + r * 20.0));
+                
+                if (r > borderInner) {
+                    gl_FragColor = vec4(glow, 1.0);
+                } else {
+                    if (activePortal > 0.5) {
+                        // Open Portal View
+                        vec2 screenUv = gl_FragCoord.xy / resolution;
+                        vec4 portalColor = texture2D(map, screenUv);
+                        gl_FragColor = portalColor;
+                    } else {
+                        // Closed Portal Mist
+                        float mist = noise(p * 4.0 - time * 1.5) * 0.5 + 0.5;
+                        gl_FragColor = vec4(borderColor * mist, 1.0);
+                    }
                 }
-            `
-        };
+            }
+        `;
 
         this.materials = {
             blue: new THREE.ShaderMaterial({
                 uniforms: {
                     map: { value: this.renderTargets.blue.texture },
-                    resolution: { value: new THREE.Vector2() }
+                    resolution: { value: new THREE.Vector2() },
+                    time: { value: 0 },
+                    borderColor: { value: new THREE.Color(0x00aaff) },
+                    activePortal: { value: 0.0 }
                 },
-                vertexShader: shader.vertexShader,
-                fragmentShader: shader.fragmentShader
+                vertexShader: vertexShader,
+                fragmentShader: fragmentShader,
+                transparent: true
             }),
             orange: new THREE.ShaderMaterial({
                 uniforms: {
                     map: { value: this.renderTargets.orange.texture },
-                    resolution: { value: new THREE.Vector2() }
+                    resolution: { value: new THREE.Vector2() },
+                    time: { value: 0 },
+                    borderColor: { value: new THREE.Color(0xffaa00) },
+                    activePortal: { value: 0.0 }
                 },
-                vertexShader: shader.vertexShader,
-                fragmentShader: shader.fragmentShader
+                vertexShader: vertexShader,
+                fragmentShader: fragmentShader,
+                transparent: true
             })
         };
 
@@ -83,19 +142,12 @@ export class PortalSystem {
     }
 
     createPortalMesh(color) {
-        // Portal is a simple plane for now
         const geometry = new THREE.PlaneGeometry(2, 3.5);
-        const material = new THREE.MeshBasicMaterial({ color: color });
-        const mesh = new THREE.Mesh(geometry, material);
+        // We set material later based on type, but need a placeholder or just set it in placePortal
+        const mesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ color: color }));
         mesh.visible = false;
         mesh.userData.isPortal = true;
         mesh.userData.active = false;
-        
-        // Add a border
-        const borderGeo = new THREE.RingGeometry(1, 1.1, 32); // Slightly flawed logic for a rectangular portal, let's use EdgesGeometry
-        const edges = new THREE.EdgesGeometry(geometry);
-        const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: color, linewidth: 4 }));
-        mesh.add(line);
         
         this.scene.add(mesh);
         return mesh;
@@ -117,11 +169,25 @@ export class PortalSystem {
         portal.userData.normal = normal;
         portal.userData.wall = wall;
         
-        // If both portals are active, switch materials to render targets
-        if (this.portals.blue.userData.active && this.portals.orange.userData.active) {
-            this.portals.blue.material = this.materials.blue;
-            this.portals.orange.material = this.materials.orange;
+        // Assign shader material
+        portal.material = this.materials[type];
+        
+        // Update state
+        const blueActive = this.portals.blue.userData.active;
+        const orangeActive = this.portals.orange.userData.active;
+
+        if (blueActive && orangeActive) {
+            this.materials.blue.uniforms.activePortal.value = 1.0;
+            this.materials.orange.uniforms.activePortal.value = 1.0;
+        } else {
+            this.materials.blue.uniforms.activePortal.value = 0.0;
+            this.materials.orange.uniforms.activePortal.value = 0.0;
         }
+    }
+
+    update(dt) {
+        this.materials.blue.uniforms.time.value += dt;
+        this.materials.orange.uniforms.time.value += dt;
     }
 
     render() {
@@ -173,7 +239,14 @@ export class PortalSystem {
         // Render
         this.renderer.setRenderTarget(renderTarget);
         this.renderer.clear();
+        
+        // Prevent double-encoding of sRGB by temporarily switching output to Linear
+        const savedColorSpace = this.renderer.outputColorSpace;
+        this.renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
+        
         this.renderer.render(this.scene, this.portalCam);
+        
+        this.renderer.outputColorSpace = savedColorSpace;
 
         // Restore
         destPortal.visible = destVisible;
@@ -191,11 +264,16 @@ export class PortalSystem {
             const localPoint = point.clone();
             portal.worldToLocal(localPoint);
             
-            // Check if within bounds of the portal hole
-            // Portal geom is 2x3.5. 
-            // We use slightly smaller bounds to keep walls solid at the very frame edges
-            // And a generous Z depth to allow the player to stand "in" the doorframe
-            if (Math.abs(localPoint.x) < 0.8 && Math.abs(localPoint.y) < 1.6 && Math.abs(localPoint.z) < 2.0) {
+            // Check if within bounds of the portal hole (Ellipse)
+            // Portal geom is 2x3.5. RadiusX=1, RadiusY=1.75
+            // Use slightly smaller bounds for the "hole" so we don't clip through the glowing frame
+            const rX = 0.85; 
+            const rY = 1.6;
+            
+            // Ellipse check: x^2/a^2 + y^2/b^2 <= 1
+            const val = (localPoint.x * localPoint.x) / (rX * rX) + (localPoint.y * localPoint.y) / (rY * rY);
+
+            if (val <= 1.0 && Math.abs(localPoint.z) < 2.0) {
                 return false; 
             }
         }
@@ -237,8 +315,13 @@ export class PortalSystem {
                 const localIntersect = intersectPoint.clone();
                 src.worldToLocal(localIntersect);
                 
-                // Slightly wider acceptance for teleport than for collision hole to ensure we catch it
-                if (Math.abs(localIntersect.x) < 1.0 && Math.abs(localIntersect.y) < 1.75) {
+                // Ellipse check for teleport trigger
+                // Full portal size: rX=1.0, rY=1.75
+                const rX = 1.0;
+                const rY = 1.75;
+                const val = (localIntersect.x * localIntersect.x) / (rX * rX) + (localIntersect.y * localIntersect.y) / (rY * rY);
+
+                if (val <= 1.0) {
                     return this.teleport(playerCapsule, playerVelocity, src, dest, intersectPoint, endPos);
                 }
             }
