@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Websim Portal</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #000;
+            font-family: monospace;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        #game-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+        #crosshair {
+            width: 20px;
+            height: 20px;
+            opacity: 0.8;
+        }
+        /* Mobile Controls */
+        #mobile-controls {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: auto;
+            touch-action: none;
+            display: none; /* Hidden on desktop by default */
+        }
+        .control-zone {
+            position: absolute;
+            bottom: 0;
+            width: 50%;
+            height: 50%;
+        }
+        #zone-move { left: 0; }
+        #zone-look { right: 0; }
+
+        .portal-btn {
+            position: absolute;
+            bottom: 30px;
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            border: 4px solid rgba(255, 255, 255, 0.5);
+            background: rgba(0, 0, 0, 0.3);
+            pointer-events: auto;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            font-weight: bold;
+            font-size: 14px;
+            backdrop-filter: blur(4px);
+            transition: transform 0.1s;
+        }
+        .portal-btn:active { transform: scale(0.95); }
+        #btn-blue {
+            right: 120px;
+            border-color: #00aaff;
+            box-shadow: 0 0 15px #00aaff80;
+        }
+        #btn-orange {
+            right: 20px;
+            border-color: #ffaa00;
+            box-shadow: 0 0 15px #ffaa0080;
+        }
+
+        #instructions {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: rgba(255,255,255,0.7);
+            background: rgba(0,0,0,0.5);
+            padding: 10px;
+            border-radius: 4px;
+        }
+    </style>
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://esm.sh/three@0.160.0",
+                "three/addons/": "https://esm.sh/three@0.160.0/examples/jsm/",
+                "nipplejs": "https://esm.sh/nipplejs@0.10.1"
+            }
+        }
+    </script>
+</head>
+<body>
+    <div id="game-container"></div>
+    
+    <div id="mobile-controls">
+        <div id="zone-move" class="control-zone"></div>
+        <div id="zone-look" class="control-zone"></div>
+        <div id="btn-blue" class="portal-btn" data-type="blue">BLUE</div>
+        <div id="btn-orange" class="portal-btn" data-type="orange">ORANGE</div>
+    </div>
+
+    <div id="ui-layer">
+        <img src="crosshair.png" id="crosshair">
+    </div>
+    
+    <div id="instructions">
+        WASD to Move<br>
+        Click / Right Click to Shoot<br>
+        Space to Jump
+    </div>
+
+    <script type="module" src="./src/main.js"></script>
+<script defer src="https://static.cloudflareinsights.com/beacon.min.js/v8c78df7c7c0f484497ecbca7046644da1771523124516" integrity="sha512-8DS7rgIrAmghBFwoOTujcf6D9rXvH8xm8JQ1Ja01h9QX8EzXldiszufYa4IFfKdLUKTTrnSFXLDkUEOTrZQ8Qg==" data-cf-beacon='{"version":"2024.11.0","token":"4c6229722a6346bc8eb5cb0e5eae5d41","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
+</body>
+</html>
